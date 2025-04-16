@@ -26,6 +26,8 @@ const double PI = 3.141592653;
 const float FOV = PI / 4.0f;
 const float depth = 16.0f;
 const olc::vi2d mapDimensions = { 16, 16 };
+float sensitivity = 0.5f;
+float volume = 0.5f;
 
 
 int map[256] = {
@@ -82,6 +84,7 @@ const int roofMap[256] = {
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 };
+std::string gameState = "menu1";
 
 float distances[700];
 int spriteIDs[700][2]; // this is an array of spriteIDs from the left of the screen to the right of the screen
@@ -123,11 +126,17 @@ public:
         sAppName = "raycast";
     }
 
+    //create sprites and decals
     olc::Sprite* sprGun1 = nullptr;
-    olc::Decal* decGun1 = nullptr;
-
+    olc::Decal*  decGun1 = nullptr;
     olc::Sprite* sprGun2 = nullptr;
-    olc::Decal* decGun2 = nullptr;
+    olc::Decal*  decGun2 = nullptr;
+    olc::Sprite* sprBackButton = nullptr;
+    olc::Decal*  decBackButton = nullptr;
+    olc::Sprite* sprCredButton = nullptr;
+    olc::Decal*  decCredButton = nullptr;
+    olc::Sprite* sprSettingsButton = nullptr;
+    olc::Decal*  decSettingsButton = nullptr;
 
     person player;
 
@@ -208,18 +217,20 @@ public:
     }
     
     void buttons(float fElapsedTime) {
+		//turning left and right
         if (GetKey(olc::A).bHeld)
-            player.angle -= 1.5f * fElapsedTime; // Turn left
+            player.angle -= 1.5f * fElapsedTime*sensitivity*2;
         if (GetKey(olc::D).bHeld)
-            player.angle += 1.5f * fElapsedTime; // Turn right
+            player.angle += 1.5f * fElapsedTime * sensitivity * 2;
         if (player.angle > 2*PI) {
             player.angle = 0;
         }
         else if (player.angle < 0) {
             player.angle = 2 * PI;
         }
-        float moveSpeed = 5.0f; // Units per second
+        float moveSpeed = 5.0f; // units per second
 
+		//forward and backward movement
         if (GetKey(olc::S).bHeld) {
             player.location.x -= sinf(player.angle) * moveSpeed * fElapsedTime;
             player.location.y -= cosf(player.angle) * moveSpeed * fElapsedTime;
@@ -239,12 +250,18 @@ public:
             }
         }
 
+        //shooting
         if (GetKey(olc::Key::SPACE).bPressed) {
             player.isShooting = true;
         }
         else {
             player.isShooting = false;
         }
+
+        // menu
+		if (GetKey(olc::Key::ESCAPE).bPressed) {
+			gameState = "menu1";
+		}
 
     }
 
@@ -766,9 +783,7 @@ public:
             DrawDecal({ 340, 250 }, decGun1, { 0.1f, 0.1f });
         }
     }
-
-
-
+    
     void collision(float fElapsedTime) {
         DrawStringDecal({320,340}, std::to_string(player.health), olc::RED);
         DrawStringDecal({ 350,0 }, "wave: " + std::to_string(wave / 10));
@@ -787,47 +802,165 @@ public:
         }
     }
 
+    float slider(olc::vf2d centre, int width, int height, float& value)
+    {
+        olc::vf2d start = { centre.x - width / 2.0f, centre.y - height / 2.0f };
+        olc::vf2d mousePos = GetMousePos();
+
+        // Handle mouse interaction
+        olc::vf2d sliderSize = { 5, (float)height + 5 };
+        olc::vf2d sliderPos = { start.x + value * (width - sliderSize.x), start.y - 2.5f };
+
+        // Only update if mouse is held and within this slider's vertical bounds
+        if (GetMouse(0).bHeld &&
+            mousePos.y >= start.y && mousePos.y <= start.y + height)
+        {
+            float newSliderX = std::clamp(mousePos.x, start.x, start.x + width - sliderSize.x);
+            value = (newSliderX - start.x) / (width - sliderSize.x); // update value from position
+        }
+
+        // Draw slider track
+        FillRectDecal(start, { (float)width, (float)height }, olc::Pixel(169, 169, 169));
+        FillRectDecal({ start.x + 2.5f, start.y + 1.0f }, { (float)width - 5, (float)height - 2 }, olc::Pixel(140, 140, 140));
+
+        // Draw slider handle
+        sliderPos = { start.x + value * (width - sliderSize.x), start.y - 2.5f };
+        FillRectDecal(sliderPos, sliderSize, olc::Pixel(169, 169, 169, 255));
+
+        return value;
+    }
+
+
     bool OnUserCreate() override {
         setUp();
 
-        
-
         //create 10 gargoyles
-        for (int i = 0; i < 10+wave; i++) {
+        for (int i = 0; i < 10; i++) {
             
             Sprites.push_back(sprite(0, (0, 0, 0), { 0,0 }, 0, 0.0f, 0));
         }
         //create a lamp
         Sprites.push_back(sprite(1, (0, 0, 0), { 7.5f,7.5f }, 0, 32.0f, 0));
 
+        for (int i = 0; i < amountOfEnemys; i++) {
+            //if its a gargoyle
+            if (Sprites[i].id == 0) {
+                Sprites[i].location = { (float)dist(gen),(float)dist(gen) };
+            }
+
+        }
+
         //loading image for use
+        //guns
         sprGun1 = new olc::Sprite("textures/materials/gun.png");
         decGun1 = new olc::Decal(sprGun1);
         sprGun2 = new olc::Sprite("textures/materials/gun (1).png");
         decGun2 = new olc::Decal(sprGun2);
 
-        for (int i = 0; i < amountOfEnemys; i++) {
-            //if its a gargoyle
-            if (Sprites[i].id == 0) {
-                Sprites[i].location = { (float)dist(gen),(float)dist(gen)};
-            }
-            
-        }
+        //UI
+        sprBackButton = new olc::Sprite("textures/UI/back_button.png");
+        decBackButton = new olc::Decal(sprBackButton);
+        sprCredButton = new olc::Sprite("textures/UI/cred_button.png");
+        decCredButton = new olc::Decal(sprCredButton);
+        sprSettingsButton = new olc::Sprite("textures/UI/settings_button.png");
+        decSettingsButton = new olc::Decal(sprSettingsButton);
+        
+
+
+        
         return true;
     }
 
     bool OnUserUpdate(float fElapsedTime) override {
-        Clear(olc::BLACK);
-        buttons(fElapsedTime);
-        renderFloor();
-        renderRoof();
-        renderWall();
-        renderMap();
-        renderSprites();
-        updateSprite(fElapsedTime);
-        shooting(fElapsedTime);
-        collision(fElapsedTime);
-        
+        Clear(olc::DARK_CYAN);
+        if (gameState == "play") {
+            buttons(fElapsedTime);
+            renderFloor();
+            renderRoof();
+            renderWall();
+            renderMap();
+            renderSprites();
+            updateSprite(fElapsedTime);
+            shooting(fElapsedTime);
+            collision(fElapsedTime);
+
+        }
+        else if (gameState == "menu1") {
+			
+            olc::vf2d mousePos = GetMousePos();
+            if (GetMouse(0).bPressed) {
+                if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 275 && mousePos.y < 323) {
+                    gameState = "play";
+                }
+                if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 200 && mousePos.y < 248) {
+                    gameState = "credits";
+                }
+                if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 125 && mousePos.y < 173) {
+                    gameState = "settings";
+                }
+            }
+            //back button
+            if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 275 && mousePos.y < 323) {
+                DrawDecal({ 300, 274 }, decBackButton, { 3.2f, 3.2f });
+            }
+            else {
+                DrawDecal({ 302, 275 }, decBackButton, { 3.0f, 3.0f });
+            }
+            //credits button
+            if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 200 && mousePos.y < 248) {
+                DrawDecal({ 300, 199 }, decCredButton, { 3.2f, 3.2f });
+            }                              
+            else {                         
+                DrawDecal({ 302, 200 }, decCredButton, { 3.0f, 3.0f });
+            }
+            //settings button
+            if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 125 && mousePos.y < 173) {
+                DrawDecal({ 300, 124 }, decSettingsButton, { 3.2f, 3.2f });
+            }
+            else {
+                DrawDecal({ 302, 125 }, decSettingsButton, { 3.0f, 3.0f });
+            }
+
+
+
+
+
+        }
+
+        else if (gameState == "credits") {
+            DrawStringDecal({ 250, 150 }, "Made by: Shojo_", olc::BLACK, { 2.0f,2.0f });
+            DrawStringDecal({ 248, 170 }, "Thanks for playing :)", olc::BLACK, { 2.0f,2.0f });
+
+            //back button
+            olc::vf2d mousePos = GetMousePos();
+            if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 275 && mousePos.y < 323) {
+                DrawDecal({ 300, 274 }, decBackButton, { 3.2f, 3.2f });
+                if (GetMouse(0).bPressed) {
+                    gameState = "menu1";
+                }
+
+            }
+            else {
+                DrawDecal({ 302, 275 }, decBackButton, { 3.0f, 3.0f });
+            }
+
+		}
+		else if (gameState == "settings") {
+			DrawStringDecal({ 270, 150 }, "Sensitivity", olc::BLACK, { 2.0f,2.0f });
+            slider({350,175},100,10, sensitivity);
+            //back button
+			olc::vf2d mousePos = GetMousePos();
+			if (mousePos.x > 302 && mousePos.x < 398 && mousePos.y > 275 && mousePos.y < 323) {
+				DrawDecal({ 300, 274 }, decBackButton, { 3.2f, 3.2f });
+				if (GetMouse(0).bPressed) {
+					gameState = "menu1";
+				}
+				
+			}
+			else {
+				DrawDecal({ 302, 275 }, decBackButton, { 3.0f, 3.0f });
+			}
+		}
         return true;
     }
 };
